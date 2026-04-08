@@ -1,0 +1,24 @@
+# macOS
+.DS_Store
+
+# Windows
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+*.tmp
+*.log
+*.pem
+*:Zone.Identifier
+
+# Build output (if any)
+dist/
+build/
+
+.claude/
+
+CLAUDE.md
+TEST_CASES.md
+PRD.md

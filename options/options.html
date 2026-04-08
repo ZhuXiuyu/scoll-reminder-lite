@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Scroll Reminder - 详细设置</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #f5f5f5;
+      color: #333;
+      line-height: 1.6;
+    }
+
+    .container {
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 40px 20px;
+    }
+
+    .header {
+      text-align: center;
+      margin-bottom: 40px;
+    }
+
+    .header-icon {
+      font-size: 48px;
+      margin-bottom: 12px;
+    }
+
+    .header-title {
+      font-size: 28px;
+      font-weight: 600;
+      color: #333;
+    }
+
+    .header-subtitle {
+      font-size: 14px;
+      color: #666;
+      margin-top: 8px;
+    }
+
+    .card {
+      background: white;
+      border-radius: 12px;
+      padding: 24px;
+      margin-bottom: 20px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+    }
+
+    .card-title {
+      font-size: 18px;
+      font-weight: 600;
+      margin-bottom: 20px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid #f0f0f0;
+    }
+
+    .form-group {
+      margin-bottom: 20px;
+    }
+
+    .form-label {
+      display: block;
+      font-size: 14px;
+      font-weight: 500;
+      margin-bottom: 8px;
+      color: #333;
+    }
+
+    .form-description {
+      font-size: 12px;
+      color: #666;
+      margin-bottom: 8px;
+    }
+
+    .form-input {
+      width: 100%;
+      padding: 10px 14px;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      font-size: 14px;
+      transition: border-color 0.2s;
+    }
+
+    .form-input:focus {
+      outline: none;
+      border-color: #ff6b6b;
+    }
+
+    .form-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+
+    .btn {
+      padding: 10px 20px;
+      border-radius: 8px;
+      border: none;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .btn-primary {
+      background: #ff6b6b;
+      color: white;
+    }
+
+    .btn-primary:hover {
+      background: #ff5252;
+    }
+
+    .btn-secondary {
+      background: #f0f0f0;
+      color: #333;
+    }
+
+    .btn-secondary:hover {
+      background: #e0e0e0;
+    }
+
+    .btn-danger {
+      background: #ff4444;
+      color: white;
+    }
+
+    .btn-danger:hover {
+      background: #cc0000;
+    }
+
+    .website-table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    .website-table th,
+    .website-table td {
+      padding: 12px;
+      text-align: left;
+      border-bottom: 1px solid #f0f0f0;
+    }
+
+    .website-table th {
+      font-weight: 600;
+      font-size: 12px;
+      color: #666;
+      text-transform: uppercase;
+    }
+
+    .website-table td {
+      font-size: 14px;
+    }
+
+    .website-table input[type="checkbox"] {
+      width: 18px;
+      height: 18px;
+      cursor: pointer;
+    }
+
+    .add-website-row {
+      display: flex;
+      gap: 12px;
+      margin-top: 16px;
+    }
+
+    .add-website-row input {
+      flex: 1;
+    }
+
+    .stats-section {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 16px;
+    }
+
+    .stat-card {
+      background: #f9f9f9;
+      border-radius: 8px;
+      padding: 16px;
+      text-align: center;
+    }
+
+    .stat-value {
+      font-size: 32px;
+      font-weight: 600;
+      color: #ff6b6b;
+    }
+
+    .stat-label {
+      font-size: 13px;
+      color: #666;
+      margin-top: 4px;
+    }
+
+    .weekly-chart {
+      margin-top: 20px;
+    }
+
+    .chart-row {
+      display: flex;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+
+    .chart-label {
+      width: 40px;
+      font-size: 12px;
+      color: #666;
+    }
+
+    .chart-bar {
+      flex: 1;
+      height: 20px;
+      background: #f0f0f0;
+      border-radius: 4px;
+      overflow: hidden;
+      margin: 0 12px;
+    }
+
+    .chart-fill {
+      height: 100%;
+      background: #ff6b6b;
+      border-radius: 4px;
+      transition: width 0.3s;
+    }
+
+    .chart-value {
+      width: 30px;
+      font-size: 12px;
+      color: #666;
+      text-align: right;
+    }
+
+    .danger-zone {
+      border: 1px solid #ffcccc;
+      background: #fff5f5;
+    }
+
+    .danger-zone .card-title {
+      color: #ff4444;
+      border-bottom-color: #ffcccc;
+    }
+
+    .footer {
+      text-align: center;
+      padding: 20px;
+      color: #999;
+      font-size: 12px;
+    }
+
+    .success-message {
+      background: #d4edda;
+      color: #155724;
+      padding: 12px;
+      border-radius: 8px;
+      margin-bottom: 16px;
+      display: none;
+    }
+
+    .error-message {
+      background: #f8d7da;
+      color: #721c24;
+      padding: 12px;
+      border-radius: 8px;
+      margin-bottom: 16px;
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <div class="header-icon">🛑</div>
+      <h1 class="header-title">Scroll Reminder</h1>
+      <p class="header-subtitle">详细设置</p>
+    </div>
+
+    <div class="success-message" id="successMessage">设置已保存</div>
+    <div class="error-message" id="errorMessage">保存失败，请重试</div>
+
+    <!-- 触发阈值设置 -->
+    <div class="card">
+      <h2 class="card-title">触发阈值</h2>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">时间窗口</label>
+          <p class="form-description">在此时间内达到指定 scroll 次数将触发提醒</p>
+          <input type="number" class="form-input" id="timeWindow" value="2" min="1" max="10">
+          <span style="font-size: 12px; color: #666;">分钟</span>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Scroll 次数</label>
+          <p class="form-description">在时间窗口内达到此次数将触发提醒</p>
+          <input type="number" class="form-input" id="scrollCount" value="3" min="1" max="20">
+          <span style="font-size: 12px; color: #666;">次</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 冷却时间设置 -->
+    <div class="card">
+      <h2 class="card-title">冷却时间</h2>
+      <div class="form-group">
+        <label class="form-label">提醒间隔</label>
+        <p class="form-description">用户选择"继续浏览"后，多久内不再提醒</p>
+        <input type="number" class="form-input" id="cooldown" value="5" min="1" max="60" style="width: 200px; display: inline-block;">
+        <span style="font-size: 12px; color: #666;">分钟</span>
+      </div>
+    </div>
+
+    <!-- 网站列表管理 -->
+    <div class="card">
+      <h2 class="card-title">监测网站管理</h2>
+      <table class="website-table">
+        <thead>
+          <tr>
+            <th>域名</th>
+            <th>启用</th>
+            <th>操作</th>
+          </tr>
+        </thead>
+        <tbody id="websiteTableBody">
+          <!-- 动态生成 -->
+        </tbody>
+      </table>
+      <div class="add-website-row">
+        <input type="text" class="form-input" id="newWebsiteDomain" placeholder="输入域名，如: example.com">
+        <button class="btn btn-primary" id="addWebsiteBtn">添加</button>
+      </div>
+    </div>
+
+    <!-- 统计数据 -->
+    <div class="card">
+      <h2 class="card-title">使用统计</h2>
+      <div class="stats-section">
+        <div class="stat-card">
+          <div class="stat-value" id="totalTriggers">0</div>
+          <div class="stat-label">今日触发</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" id="totalLeave">0</div>
+          <div class="stat-label">选择离开</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" id="totalContinue">0</div>
+          <div class="stat-label">选择继续</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" id="streakDays">0</div>
+          <div class="stat-label">连续成功天数</div>
+        </div>
+      </div>
+
+      <div class="weekly-chart" id="weeklyChart">
+        <h3 style="font-size: 14px; margin-bottom: 12px;">本周趋势</h3>
+        <!-- 动态生成 -->
+      </div>
+    </div>
+
+    <!-- 危险区域 -->
+    <div class="card danger-zone">
+      <h2 class="card-title">危险区域</h2>
+      <div class="form-group">
+        <label class="form-label">清除所有数据</label>
+        <p class="form-description">这将删除所有设置和统计数据，不可恢复</p>
+        <button class="btn btn-danger" id="clearDataBtn">清除所有数据</button>
+      </div>
+    </div>
+
+    <div class="footer">
+      Scroll Reminder v1.0.0 | 数据仅存储在本地
+    </div>
+  </div>
+
+  <script src="options.js"></script>
+</body>
+</html>
