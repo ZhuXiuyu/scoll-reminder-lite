@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Scroll Reminder</title>
+  <title>Scroll Reminder Lite</title>
   <style>
     * {
       margin: 0;
@@ -14,17 +14,18 @@
     body {
       width: 320px;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      background: #f5f5f5;
+      background: #ffffff;
       color: #333;
+      padding: 16px;
     }
 
     .header {
-      background: #ff6b6b;
-      color: white;
-      padding: 16px;
       display: flex;
       align-items: center;
-      gap: 12px;
+      gap: 10px;
+      margin-bottom: 16px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid #eee;
     }
 
     .header-icon {
@@ -36,27 +37,14 @@
       font-weight: 600;
     }
 
-    .section {
-      background: white;
-      margin: 8px;
-      border-radius: 8px;
-      padding: 12px;
-    }
-
-    .section-title {
-      font-size: 12px;
-      font-weight: 600;
-      color: #666;
-      text-transform: uppercase;
-      margin-bottom: 12px;
-      letter-spacing: 0.5px;
-    }
-
-    /* 开关 */
-    .toggle-row {
+    .toggle-section {
       display: flex;
       align-items: center;
       justify-content: space-between;
+      margin-bottom: 16px;
+      padding: 12px;
+      background: #f5f5f5;
+      border-radius: 8px;
     }
 
     .toggle-label {
@@ -94,13 +82,19 @@
       transform: translateX(20px);
     }
 
-    /* 网站列表 */
-    .website-list {
-      max-height: 150px;
-      overflow-y: auto;
+    .section-title {
+      font-size: 12px;
+      font-weight: 600;
+      color: #666;
+      margin-bottom: 10px;
+      text-transform: uppercase;
     }
 
-    .website-item {
+    .site-list {
+      margin-bottom: 16px;
+    }
+
+    .site-item {
       display: flex;
       align-items: center;
       justify-content: space-between;
@@ -108,28 +102,69 @@
       border-bottom: 1px solid #f0f0f0;
     }
 
-    .website-item:last-child {
+    .site-item:last-child {
       border-bottom: none;
     }
 
-    .website-domain {
-      font-size: 13px;
-      color: #333;
+    .site-info {
+      display: flex;
+      flex-direction: column;
     }
 
-    .website-checkbox {
+    .site-name {
+      font-size: 13px;
+      font-weight: 500;
+    }
+
+    .site-domain {
+      font-size: 11px;
+      color: #999;
+    }
+
+    .site-checkbox {
       width: 18px;
       height: 18px;
       cursor: pointer;
     }
 
-    .add-website {
-      display: flex;
-      gap: 8px;
+    .site-list.disabled {
+      opacity: 0.4;
+      pointer-events: none;
+    }
+
+    .custom-section.disabled {
+      opacity: 0.4;
+      pointer-events: none;
+    }
+
+    .disabled-notice {
+      display: none;
+      padding: 12px;
+      background: #f5f5f5;
+      border-radius: 8px;
+      font-size: 13px;
+      color: #999;
+      text-align: center;
       margin-top: 12px;
     }
 
-    .add-website input {
+    .disabled-notice.show {
+      display: block;
+    }
+
+    .custom-section {
+      margin-top: 16px;
+      padding-top: 16px;
+      border-top: 1px solid #eee;
+    }
+
+    .add-row {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+
+    .add-input {
       flex: 1;
       padding: 8px 12px;
       border: 1px solid #ddd;
@@ -137,7 +172,7 @@
       font-size: 13px;
     }
 
-    .add-website button {
+    .add-btn {
       padding: 8px 16px;
       background: #ff6b6b;
       color: white;
@@ -147,149 +182,85 @@
       font-size: 13px;
     }
 
-    .add-website button:hover {
+    .add-btn:hover {
       background: #ff5252;
     }
 
-    /* 模式选择 */
-    .mode-option {
+    .custom-list {
+      max-height: 120px;
+      overflow-y: auto;
+    }
+
+    .custom-item {
       display: flex;
       align-items: center;
-      gap: 8px;
-      padding: 8px 0;
-      cursor: pointer;
-    }
-
-    .mode-option input {
-      cursor: pointer;
-    }
-
-    .mode-option label {
+      justify-content: space-between;
+      padding: 6px 0;
       font-size: 13px;
+    }
+
+    .custom-domain {
+      color: #666;
+    }
+
+    .delete-btn {
+      padding: 4px 8px;
+      background: #f0f0f0;
+      border: none;
+      border-radius: 4px;
       cursor: pointer;
-    }
-
-    /* 统计 */
-    .stats-grid {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 8px;
-    }
-
-    .stat-item {
-      text-align: center;
-      padding: 8px;
-      background: #f9f9f9;
-      border-radius: 6px;
-    }
-
-    .stat-value {
-      font-size: 20px;
-      font-weight: 600;
-      color: #ff6b6b;
-    }
-
-    .stat-label {
       font-size: 11px;
       color: #666;
-      margin-top: 4px;
     }
 
-    /* 底部链接 */
-    .footer {
-      padding: 12px;
-      text-align: center;
+    .delete-btn:hover {
+      background: #e0e0e0;
+      color: #ff4444;
     }
 
-    .footer a {
-      color: #ff6b6b;
-      text-decoration: none;
-      font-size: 13px;
-    }
-
-    .footer a:hover {
-      text-decoration: underline;
-    }
-
-    /* 空状态 */
-    .empty-state {
-      text-align: center;
-      padding: 20px;
-      color: #999;
-      font-size: 13px;
-    }
-
-    /* 滚动条样式 */
-    .website-list::-webkit-scrollbar {
-      width: 4px;
-    }
-
-    .website-list::-webkit-scrollbar-track {
-      background: #f1f1f1;
-    }
-
-    .website-list::-webkit-scrollbar-thumb {
-      background: #ccc;
-      border-radius: 2px;
+    .hint {
+      margin-top: 12px;
+      padding: 8px;
+      background: #fff8e1;
+      border-radius: 6px;
+      font-size: 11px;
+      color: #666;
     }
   </style>
 </head>
 <body>
   <div class="header">
     <span class="header-icon">🛑</span>
-    <span class="header-title">Scroll Reminder</span>
+    <span class="header-title">Scroll Reminder Lite</span>
   </div>
 
-  <div class="section">
-    <div class="toggle-row">
-      <span class="toggle-label">插件已启用</span>
-      <div class="toggle-switch active" id="enabledToggle"></div>
+  <div class="toggle-section">
+    <span class="toggle-label">插件已启用</span>
+    <div class="toggle-switch active" id="enabledToggle"></div>
+  </div>
+
+  <div class="section-title">默认监控站点</div>
+  <div class="site-list" id="defaultSites">
+    <!-- 动态生成 -->
+  </div>
+
+  <div class="disabled-notice" id="disabledNotice">
+    插件已禁用，开启后可配置站点
+  </div>
+
+  <div class="custom-section" id="customSection">
+    <div class="section-title">自定义高危网站 (全局监控)</div>
+    <div class="add-row">
+      <input type="text" class="add-input" id="customInput" placeholder="输入域名(如v2ex.com)">
+      <button class="add-btn" id="addBtn">添加</button>
     </div>
-  </div>
-
-  <div class="section">
-    <div class="section-title">监测网站</div>
-    <div class="website-list" id="websiteList">
+    <div class="custom-list" id="customList">
       <!-- 动态生成 -->
     </div>
-    <div class="add-website">
-      <input type="text" id="newDomain" placeholder="输入域名，如: example.com">
-      <button id="addBtn">添加</button>
-    </div>
   </div>
 
-  <div class="section">
-    <div class="section-title">模式</div>
-    <div class="mode-option">
-      <input type="radio" name="mode" id="modeBlacklist" value="blacklist" checked>
-      <label for="modeBlacklist">黑名单模式（只监测列表中的网站）</label>
-    </div>
-    <div class="mode-option">
-      <input type="radio" name="mode" id="modeWhitelist" value="whitelist">
-      <label for="modeWhitelist">白名单模式（监测所有网站，除了白名单）</label>
-    </div>
-  </div>
-
-  <div class="section">
-    <div class="section-title">今日统计</div>
-    <div class="stats-grid">
-      <div class="stat-item">
-        <div class="stat-value" id="statTriggers">0</div>
-        <div class="stat-label">触发提醒</div>
-      </div>
-      <div class="stat-item">
-        <div class="stat-value" id="statLeave">0</div>
-        <div class="stat-label">选择离开</div>
-      </div>
-      <div class="stat-item">
-        <div class="stat-value" id="statContinue">0</div>
-        <div class="stat-label">选择继续</div>
-      </div>
-    </div>
-  </div>
-
-  <div class="footer">
-    <a href="#" id="openOptions">打开详细设置</a>
+  <div class="hint">
+    * 修改后立即生效
   </div>
 
   <script src="popup.js"></script>

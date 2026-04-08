@@ -1,4 +1,4 @@
-# Scroll Reminder
+# Scroll Reminder Lite
 
 防止在社交媒体上无意识 scroll 摄入碎片化信息的浏览器扩展。
 

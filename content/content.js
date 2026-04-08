@@ -1,285 +1,522 @@
-// Scroll Reminder - Content Script
-// 检测 scroll 行为并触发干预
+// Scroll Reminder Lite - Content Script
+// 核心功能：路由判定、防抖计数、时间衰减、三级干预
 
 (function() {
   'use strict';
 
   // 防止重复注入
-  if (window.scrollReminderInjected) return;
-  window.scrollReminderInjected = true;
+  if (window.scrollReminderLiteInjected) return;
+  window.scrollReminderLiteInjected = true;
 
-  // 状态
-  let isMonitoring = false;
-  let lastScrollTime = 0;
-  let scrollThrottleTimer = null;
+  // ===== 配置 =====
+  const CONFIG = {
+    DEBOUNCE_MS: 600,           // 防抖时间
+    DECAY_INTERVAL_S: 60,       // 衰减间隔（秒）
+    LEVEL1_THRESHOLD: 3,        // 呼吸警戒线
+    LEVEL2_THRESHOLD: 6,        // 灵魂拷问
+    LEVEL3_THRESHOLD: 9,        // 强制隔离
+    LEVEL1_COOLDOWN_S: 5,       // Level 1 冷却
+    LEVEL2_COOLDOWN_S: 10,      // Level 2 冷却
+  };
 
-  // 初始化
+  // 默认站点路由规则
+  const SITE_RULES = {
+    'zhihu.com': {
+      type: 'whitelist',
+      allow: [/^\/search/, /^\/people\//, /^\/collection\//, /^\/education/, /^\/consult/]
+    },
+    'bilibili.com': {
+      type: 'whitelist',
+      allow: [/^\/video\//, /^\/search/, /^\/fav/],
+      hostnameAllow: ['space.bilibili.com']
+    },
+    'xiaohongshu.com': {
+      type: 'whitelist',
+      allow: [/^\/user\/profile/, /^\/search\//]
+    },
+    'weibo.com': {
+      type: 'whitelist',
+      allow: [/^\/u\//, /^\/search/]
+    },
+    'douyin.com': {
+      type: 'global'
+    },
+    'tiktok.com': {
+      type: 'global'
+    },
+    'youtube.com': {
+      type: 'blacklist',
+      block: [/^\/shorts/]
+    }
+  };
+
+  // ===== 状态 =====
+  let state = {
+    enabled: true,
+    count: 0,
+    lastScrollTime: 0,
+    debounceTimer: null,
+    decayTimer: null,
+    isSuspended: false,
+    suspendEndTime: 0,
+    currentLevel: 0,
+    levelCooldownEnd: 0
+  };
+
+  // ===== 初始化 =====
   async function init() {
-    console.log('[Scroll Reminder] Content script initialized on', location.hostname);
-
-    try {
-      // 检查是否应该监测当前网站
-      const response = await sendMessage({ type: 'CHECK_MONITORING' });
-      console.log('[Scroll Reminder] CHECK_MONITORING response:', response);
-
-      if (!response || !response.shouldMonitor) {
-        console.log('[Scroll Reminder] Not monitoring this site');
-        return;
-      }
-
-      isMonitoring = true;
-      setupEventListeners();
-      console.log('[Scroll Reminder] Monitoring started for', location.hostname);
-    } catch (error) {
-      console.error('[Scroll Reminder] Init error:', error);
-    }
-  }
-
-  // 设置事件监听
-  function setupEventListeners() {
-    // 鼠标滚轮
-    window.addEventListener('wheel', handleScroll, { passive: true });
-
-    // 触摸滑动
-    window.addEventListener('touchmove', handleScroll, { passive: true });
-
-    // 键盘翻页
-    window.addEventListener('keydown', handleKeyDown, { passive: true });
-
-    // 滚动条拖拽检测（通过 mousedown 在滚动条区域）
-    window.addEventListener('mousedown', handleMouseDown, { passive: true });
-
-    // 监听来自 background 的消息
-    chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-      if (message.type === 'PING') {
-        sendResponse({ pong: true });
-      }
-    });
-  }
-
-  // 处理 scroll 事件
-  function handleScroll(event) {
-    if (!isMonitoring) return;
-
-    // 节流：同一时间点的大量 scroll 事件只算一次
-    const now = Date.now();
-    if (now - lastScrollTime < 100) return;
-    lastScrollTime = now;
-
-    // 清除之前的定时器
-    if (scrollThrottleTimer) {
-      clearTimeout(scrollThrottleTimer);
-    }
-
-    // 延迟发送，避免过于频繁的通信
-    scrollThrottleTimer = setTimeout(() => {
-      recordScroll();
-    }, 50);
-  }
-
-  // 处理键盘事件
-  function handleKeyDown(event) {
-    if (!isMonitoring) return;
-
-    // PageDown, PageUp, Space, Arrow keys
-    if (['PageDown', 'PageUp', ' ', 'ArrowDown', 'ArrowUp'].includes(event.key)) {
-      recordScroll();
-    }
-  }
-
-  // 处理鼠标按下（检测滚动条拖拽）
-  function handleMouseDown(event) {
-    if (!isMonitoring) return;
-
-    // 检测是否点击在滚动条区域
-    const windowWidth = window.innerWidth;
-    const windowHeight = window.innerHeight;
-    const scrollbarWidth = 20; // 估计的滚动条宽度
-
-    // 垂直滚动条区域
-    const isVerticalScrollbar = event.clientX > windowWidth - scrollbarWidth;
-    // 水平滚动条区域
-    const isHorizontalScrollbar = event.clientY > windowHeight - scrollbarWidth;
-
-    if (isVerticalScrollbar || isHorizontalScrollbar) {
-      // 监听 mouseup 来确认是一次完整的拖拽
-      const handleMouseUp = () => {
-        recordScroll();
-        document.removeEventListener('mouseup', handleMouseUp);
-      };
-      document.addEventListener('mouseup', handleMouseUp);
-    }
-  }
-
-  // 记录 scroll 并检查是否触发干预
-  async function recordScroll() {
-    try {
-      const response = await sendMessage({ type: 'RECORD_SCROLL' });
-
-      if (response && response.triggered) {
-        handleIntervention(response.level);
-      }
-    } catch (error) {
-      console.error('[Scroll Reminder] Error recording scroll:', error);
-    }
-  }
-
-  // 处理干预
-  function handleIntervention(level) {
-    switch (level) {
-      case 1:
-        showGlowEffect();
-        break;
-      case 2:
-        showDimEffect();
-        break;
-      case 3:
-        showModal();
-        break;
-      default:
-        if (level > 3) {
-          // 超过3次继续强制弹窗
-          showModal();
-        }
-    }
-  }
-
-  // 阶段1：边缘光晕
-  function showGlowEffect() {
-    // 移除已有的光晕
-    removeExistingElement('.scroll-reminder-glow');
-
-    const glow = document.createElement('div');
-    glow.className = 'scroll-reminder-glow';
-    document.body.appendChild(glow);
-
-    // 3秒后自动移除
-    setTimeout(() => {
-      glow.remove();
-    }, 3000);
-  }
-
-  // 阶段2：页面变暗 + 浮动提示
-  function showDimEffect() {
-    // 移除已有的变暗效果
-    removeExistingElement('.scroll-reminder-dim');
-    removeExistingElement('.scroll-reminder-toast');
-
-    const dim = document.createElement('div');
-    dim.className = 'scroll-reminder-dim';
-    document.body.appendChild(dim);
-
-    const toast = document.createElement('div');
-    toast.className = 'scroll-reminder-toast';
-    toast.innerHTML = `
-      <div class="scroll-reminder-toast-icon">⚠️</div>
-      <div>短时间内已 scroll 多次</div>
-    `;
-    document.body.appendChild(toast);
-
-    // 3秒后自动移除
-    setTimeout(() => {
-      dim.remove();
-      toast.remove();
-    }, 3000);
-  }
-
-  // 阶段3：强制弹窗
-  function showModal() {
-    // 如果已经有弹窗，不再显示
-    if (document.querySelector('.scroll-reminder-overlay')) {
+    // 检查是否应该监控当前页面
+    const shouldMonitor = await checkShouldMonitor();
+    if (!shouldMonitor) {
+      console.log('[Scroll Reminder] Not monitoring this page');
       return;
     }
 
+    console.log('[Scroll Reminder] Monitoring started for', location.hostname);
+    setupEventListeners();
+    startDecayTimer();
+    setupMessageListener();
+  }
+
+  // ===== 消息监听 =====
+  function setupMessageListener() {
+    chrome.runtime.onMessage.addListener((message) => {
+      if (message.type === 'enabledChanged') {
+        // 插件启用状态变更
+        if (!message.enabled) {
+          // 禁用：清理所有干预和状态
+          cleanupInterventions();
+          state.enabled = false;
+        } else {
+          // 启用：重新初始化
+          state.enabled = true;
+          if (!state.debounceTimer) {
+            setupEventListeners();
+            startDecayTimer();
+          }
+        }
+      } else if (message.type === 'sitesChanged' || message.type === 'customSitesChanged') {
+        // 站点配置变更：重新检查是否应该监控
+        checkShouldMonitor().then(shouldMonitor => {
+          if (!shouldMonitor) {
+            cleanupInterventions();
+          }
+        });
+      }
+    });
+  }
+
+  // 清理所有干预元素和状态
+  function cleanupInterventions() {
+    // 移除所有干预元素
+    const elements = [
+      '#sr-glow', '#sr-toast', '#sr-l2-overlay', '#sr-overlay'
+    ];
+    elements.forEach(selector => {
+      const el = document.querySelector(selector);
+      if (el) el.remove();
+    });
+
+    // 恢复滚动
+    document.body.style.overflow = '';
+    document.documentElement.style.overflow = '';
+
+    // 清理定时器
+    if (state.debounceTimer) {
+      clearTimeout(state.debounceTimer);
+      state.debounceTimer = null;
+    }
+    if (state.decayTimer) {
+      clearInterval(state.decayTimer);
+      state.decayTimer = null;
+    }
+
+    // 重置状态
+    state.count = 0;
+    state.currentLevel = 0;
+    state.isSuspended = false;
+  }
+
+  // ===== 路由判定 =====
+  async function checkShouldMonitor() {
+    // 检查插件是否启用
+    const result = await chrome.storage.local.get(['enabled', 'enabledSites', 'customSites']);
+    if (result.enabled === false) return false;
+
+    const hostname = location.hostname;
+    const pathname = location.pathname;
+
+    // 检查自定义网站（全局监控）
+    const customSites = result.customSites || [];
+    for (const domain of customSites) {
+      if (hostname.includes(domain) || domain.includes(hostname.replace(/^www\./, ''))) {
+        return true;
+      }
+    }
+
+    // 检查默认站点
+    const enabledSites = result.enabledSites || {};
+    for (const [siteKey, rule] of Object.entries(SITE_RULES)) {
+      if (!hostname.includes(siteKey)) continue;
+
+      // 检查该站点是否被用户启用
+      const isEnabled = enabledSites[siteKey] !== false;
+      if (!isEnabled) return false;
+
+      // 路由判定
+      if (rule.type === 'global') {
+        return true;
+      } else if (rule.type === 'whitelist') {
+        // 白名单放行：如果匹配 allow 规则，则不监控
+        if (rule.allow) {
+          for (const pattern of rule.allow) {
+            if (pattern.test(pathname)) return false;
+          }
+        }
+        // 检查 hostname 白名单
+        if (rule.hostnameAllow) {
+          for (const allowedHost of rule.hostnameAllow) {
+            if (hostname === allowedHost || hostname.endsWith('.' + allowedHost)) return false;
+          }
+        }
+        return true;
+      } else if (rule.type === 'blacklist') {
+        // 黑名单监控：只有匹配 block 规则才监控
+        if (rule.block) {
+          for (const pattern of rule.block) {
+            if (pattern.test(pathname)) return true;
+          }
+        }
+        return false;
+      }
+    }
+
+    return false;
+  }
+
+  // ===== 事件监听 =====
+  function setupEventListeners() {
+    // 滚轮事件
+    window.addEventListener('wheel', handleScrollStart, { passive: true });
+    window.addEventListener('wheel', handleScrollEnd, { passive: true });
+
+    // 触摸事件
+    window.addEventListener('touchmove', handleScrollStart, { passive: true });
+    window.addEventListener('touchend', handleScrollEnd, { passive: true });
+  }
+
+  // Scroll 开始（触发防抖）
+  function handleScrollStart() {
+    if (!shouldCount()) return;
+
+    // 清除之前的结束定时器
+    if (state.debounceTimer) {
+      clearTimeout(state.debounceTimer);
+    }
+  }
+
+  // Scroll 结束（防抖后计数）
+  function handleScrollEnd() {
+    if (!shouldCount()) return;
+
+    // 设置防抖定时器
+    state.debounceTimer = setTimeout(() => {
+      incrementCount();
+    }, CONFIG.DEBOUNCE_MS);
+  }
+
+  // 是否应该计数
+  function shouldCount() {
+    // 检查暂停状态
+    if (state.isSuspended && Date.now() < state.suspendEndTime) {
+      return false;
+    }
+    state.isSuspended = false;
+
+    // 检查冷却状态
+    if (Date.now() < state.levelCooldownEnd) {
+      return false;
+    }
+
+    return true;
+  }
+
+  // 增加计数
+  function incrementCount() {
+    state.count++;
+    state.lastScrollTime = Date.now();
+    console.log('[Scroll Reminder] Count:', state.count);
+
+    // 检查干预层级
+    checkIntervention();
+  }
+
+  // 时间衰减定时器
+  function startDecayTimer() {
+    state.decayTimer = setInterval(() => {
+      if (state.count > 0 && state.lastScrollTime > 0) {
+        const secondsSinceLastScroll = (Date.now() - state.lastScrollTime) / 1000;
+        const decayAmount = Math.floor(secondsSinceLastScroll / CONFIG.DECAY_INTERVAL_S);
+
+        if (decayAmount > 0) {
+          state.count = Math.max(0, state.count - decayAmount);
+          console.log('[Scroll Reminder] Decay applied, new count:', state.count);
+        }
+      }
+    }, 10000); // 每10秒检查一次
+  }
+
+  // ===== 干预检查 =====
+  function checkIntervention() {
+    const count = state.count;
+
+    if (count >= CONFIG.LEVEL3_THRESHOLD && state.currentLevel < 3) {
+      state.currentLevel = 3;
+      showLevel3Intervention();
+    } else if (count >= CONFIG.LEVEL2_THRESHOLD && state.currentLevel < 2) {
+      state.currentLevel = 2;
+      showLevel2Intervention();
+    } else if (count >= CONFIG.LEVEL1_THRESHOLD && state.currentLevel < 1) {
+      state.currentLevel = 1;
+      showLevel1Intervention();
+    }
+  }
+
+  // ===== Level 1: 呼吸警戒线 =====
+  function showLevel1Intervention() {
+    console.log('[Scroll Reminder] Level 1: 呼吸警戒线');
+
+    // 创建光晕元素 - 增大范围和强度
+    const glow = document.createElement('div');
+    glow.id = 'sr-glow';
+    glow.style.cssText = `
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      pointer-events: none;
+      z-index: 2147483647;
+      box-shadow: inset 0 0 120px 40px rgba(255, 80, 0, 0.7);
+      animation: sr-breathe 2s ease-in-out infinite;
+    `;
+
+    // 添加动画样式
+    const style = document.createElement('style');
+    style.textContent = `
+      @keyframes sr-breathe {
+        0%, 100% { opacity: 0.5; box-shadow: inset 0 0 100px 30px rgba(255, 80, 0, 0.6); }
+        50% { opacity: 1; box-shadow: inset 0 0 150px 60px rgba(255, 60, 0, 0.85); }
+      }
+    `;
+    document.head.appendChild(style);
+    document.body.appendChild(glow);
+
+    // 4秒后渐隐消失
+    setTimeout(() => {
+      glow.style.transition = 'opacity 1s';
+      glow.style.opacity = '0';
+      setTimeout(() => glow.remove(), 1000);
+    }, 4000);
+
+    // 设置冷却期
+    state.levelCooldownEnd = Date.now() + CONFIG.LEVEL1_COOLDOWN_S * 1000;
+  }
+
+  // ===== Level 2: 灵魂拷问软提醒 =====
+  function showLevel2Intervention() {
+    console.log('[Scroll Reminder] Level 2: 灵魂拷问');
+
+    // 创建毛玻璃遮罩
     const overlay = document.createElement('div');
-    overlay.className = 'scroll-reminder-overlay';
-    overlay.innerHTML = `
-      <div class="scroll-reminder-modal">
-        <div class="scroll-reminder-modal-icon">🛑</div>
-        <div class="scroll-reminder-modal-title">注意</div>
-        <div class="scroll-reminder-modal-message">
-          短时间内已经 scroll 多次，是否继续浏览？
+    overlay.id = 'sr-l2-overlay';
+    overlay.style.cssText = `
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.3);
+      backdrop-filter: blur(8px);
+      z-index: 2147483646;
+      opacity: 0;
+      transition: opacity 0.4s ease;
+      pointer-events: none;
+    `;
+    document.body.appendChild(overlay);
+
+    // 创建 Toast
+    const toast = document.createElement('div');
+    toast.id = 'sr-toast';
+    toast.style.cssText = `
+      position: fixed;
+      top: 40px;
+      left: 50%;
+      transform: translateX(-50%) translateY(-100px);
+      background: rgba(0, 0, 0, 0.85);
+      backdrop-filter: blur(10px);
+      color: white;
+      padding: 14px 24px;
+      border-radius: 12px;
+      font-size: 14px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      z-index: 2147483647;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+      transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+      white-space: nowrap;
+    `;
+    toast.textContent = '👀 嘿，你是不是又开始漫无目的地刷了？';
+    document.body.appendChild(toast);
+
+    // 下拉动画（遮罩和toast同时）
+    requestAnimationFrame(() => {
+      overlay.style.opacity = '1';
+      toast.style.transform = 'translateX(-50%) translateY(0)';
+    });
+
+    // 4秒后上滑消失，遮罩同步淡出
+    setTimeout(() => {
+      toast.style.transform = 'translateX(-50%) translateY(-100px)';
+      overlay.style.opacity = '0';
+      setTimeout(() => {
+        toast.remove();
+        overlay.remove();
+      }, 400);
+    }, 4000);
+
+    // 设置冷却期
+    state.levelCooldownEnd = Date.now() + CONFIG.LEVEL2_COOLDOWN_S * 1000;
+  }
+
+  // ===== Level 3: 强制物理隔离 =====
+  function showLevel3Intervention() {
+    console.log('[Scroll Reminder] Level 3: 强制物理隔离');
+
+    // 锁定页面滚动
+    document.body.style.overflow = 'hidden';
+    document.documentElement.style.overflow = 'hidden';
+
+    // 创建遮罩
+    const overlay = document.createElement('div');
+    overlay.id = 'sr-overlay';
+    overlay.style.cssText = `
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.5);
+      backdrop-filter: blur(15px);
+      z-index: 2147483647;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    `;
+
+    // 创建弹窗
+    const modal = document.createElement('div');
+    modal.style.cssText = `
+      background: rgba(255, 255, 255, 0.95);
+      backdrop-filter: blur(20px);
+      border-radius: 16px;
+      padding: 28px;
+      max-width: 360px;
+      width: 90%;
+      text-align: center;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
+    `;
+
+    modal.innerHTML = `
+      <h2 style="font-size: 18px; font-weight: 600; margin-bottom: 16px; color: #333;">该停下来了</h2>
+      <p style="font-size: 14px; color: #666; margin-bottom: 24px; line-height: 1.6;">
+        你已经滚动了 ${state.count} 次，是时候做个选择了。
+      </p>
+      <div style="display: flex; flex-direction: column; gap: 10px;">
+        <button id="sr-btn-3min" style="
+          padding: 12px 20px;
+          background: #f0f0f0;
+          border: none;
+          border-radius: 8px;
+          font-size: 14px;
+          cursor: pointer;
+          color: #333;
+        ">给我 3 分钟收尾</button>
+
+        <div style="display: flex; gap: 8px; align-items: center;">
+          <button id="sr-btn-custom" style="
+            flex: 1;
+            padding: 12px 20px;
+            background: #f0f0f0;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            cursor: pointer;
+            color: #333;
+          ">查资料模式</button>
+          <input type="number" id="sr-custom-min" value="15" min="1" max="120" style="
+            width: 60px;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 14px;
+            text-align: center;
+          ">
+          <span style="font-size: 14px; color: #666;">分钟</span>
         </div>
-        <div class="scroll-reminder-modal-buttons">
-          <button class="scroll-reminder-btn scroll-reminder-btn-primary" id="sr-btn-leave">
-            离开此页
-          </button>
-          <button class="scroll-reminder-btn scroll-reminder-btn-secondary" id="sr-btn-continue">
-            继续浏览
-          </button>
-        </div>
+
+        <button id="sr-btn-leave" style="
+          padding: 12px 20px;
+          background: #ff4444;
+          border: none;
+          border-radius: 8px;
+          font-size: 14px;
+          cursor: pointer;
+          color: white;
+          font-weight: 500;
+        ">离开此页 (推荐)</button>
       </div>
     `;
 
+    overlay.appendChild(modal);
     document.body.appendChild(overlay);
 
     // 绑定按钮事件
-    overlay.querySelector('#sr-btn-leave').addEventListener('click', handleLeave);
-    overlay.querySelector('#sr-btn-continue').addEventListener('click', handleContinue);
+    modal.querySelector('#sr-btn-3min').addEventListener('click', () => {
+      suspendForMinutes(3);
+      closeIntervention(overlay);
+    });
 
-    // 阻止点击遮罩关闭
-    overlay.addEventListener('click', (e) => {
-      if (e.target === overlay) {
-        e.stopPropagation();
-      }
+    modal.querySelector('#sr-btn-custom').addEventListener('click', () => {
+      const minutes = parseInt(modal.querySelector('#sr-custom-min').value) || 15;
+      suspendForMinutes(minutes);
+      closeIntervention(overlay);
+    });
+
+    modal.querySelector('#sr-btn-leave').addEventListener('click', () => {
+      window.location.href = 'about:blank';
     });
   }
 
-  // 处理"离开此页"
-  async function handleLeave() {
-    try {
-      await sendMessage({ type: 'LEAVE_PAGE' });
-      // 关闭当前标签页
-      window.close();
-    } catch (error) {
-      console.error('[Scroll Reminder] Error leaving page:', error);
-      // 如果无法关闭，至少移除弹窗
-      removeModal();
-    }
+  // 暂停指定分钟
+  function suspendForMinutes(minutes) {
+    state.isSuspended = true;
+    state.suspendEndTime = Date.now() + minutes * 60 * 1000;
+    state.count = 0;
+    state.currentLevel = 0;
+    console.log(`[Scroll Reminder] Suspended for ${minutes} minutes`);
   }
 
-  // 处理"继续浏览"
-  async function handleContinue() {
-    try {
-      await sendMessage({ type: 'CONTINUE_BROWSING' });
-      removeModal();
-    } catch (error) {
-      console.error('[Scroll Reminder] Error continuing:', error);
-      removeModal();
-    }
-  }
+  // 关闭干预弹窗
+  function closeIntervention(overlay) {
+    // 恢复滚动
+    document.body.style.overflow = '';
+    document.documentElement.style.overflow = '';
 
-  // 移除弹窗
-  function removeModal() {
-    const overlay = document.querySelector('.scroll-reminder-overlay');
-    if (overlay) {
-      overlay.remove();
-    }
-  }
-
-  // 移除已有元素
-  function removeExistingElement(selector) {
-    const existing = document.querySelector(selector);
-    if (existing) {
-      existing.remove();
-    }
-  }
-
-  // 发送消息到 background
-  function sendMessage(message) {
-    return new Promise((resolve, reject) => {
-      try {
-        chrome.runtime.sendMessage(message, (response) => {
-          if (chrome.runtime.lastError) {
-            reject(chrome.runtime.lastError);
-          } else {
-            resolve(response);
-          }
-        });
-      } catch (error) {
-        reject(error);
-      }
-    });
+    // 移除遮罩
+    overlay.style.opacity = '0';
+    overlay.style.transition = 'opacity 0.3s';
+    setTimeout(() => overlay.remove(), 300);
   }
 
   // 启动
