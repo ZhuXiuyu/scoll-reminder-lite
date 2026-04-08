@@ -331,17 +331,23 @@
     const overlay = document.createElement('div');
     overlay.id = 'sr-l2-overlay';
     overlay.style.cssText = `
-      position: fixed;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      background: rgba(0, 0, 0, 0.3);
-      backdrop-filter: blur(8px);
-      z-index: 2147483646;
+      position: fixed !important;
+      top: 0 !important;
+      left: 0 !important;
+      right: 0 !important;
+      bottom: 0 !important;
+      width: 100vw !important;
+      height: 100vh !important;
+      background: rgba(0, 0, 0, 0.35) !important;
+      backdrop-filter: blur(12px) !important;
+      -webkit-backdrop-filter: blur(12px) !important;
+      z-index: 2147483646 !important;
       opacity: 0;
       transition: opacity 0.4s ease;
-      pointer-events: none;
+      pointer-events: none !important;
+      margin: 0 !important;
+      padding: 0 !important;
+      border: none !important;
     `;
     document.body.appendChild(overlay);
 
@@ -417,8 +423,7 @@
     // 创建弹窗
     const modal = document.createElement('div');
     modal.style.cssText = `
-      background: rgba(255, 255, 255, 0.95);
-      backdrop-filter: blur(20px);
+      background: #ffffff;
       border-radius: 16px;
       padding: 28px;
       max-width: 360px;
@@ -430,7 +435,7 @@
     modal.innerHTML = `
       <h2 style="font-size: 18px; font-weight: 600; margin-bottom: 16px; color: #333;">该停下来了</h2>
       <p style="font-size: 14px; color: #666; margin-bottom: 24px; line-height: 1.6;">
-        你已经滚动了 ${state.count} 次，是时候做个选择了。
+        你已经滚动了多次，是时候做个选择了。
       </p>
       <div style="display: flex; flex-direction: column; gap: 10px;">
         <button id="sr-btn-3min" style="
