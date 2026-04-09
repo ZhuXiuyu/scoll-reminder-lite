@@ -2,12 +2,12 @@
 // 极简设置面板
 
 const DEFAULT_SITES = {
-  'xiaohongshu': { name: '小红书', domain: 'xiaohongshu.com', enabled: true },
-  'bilibili': { name: '哔哩哔哩', domain: 'bilibili.com', enabled: true },
-  'zhihu': { name: '知乎', domain: 'zhihu.com', enabled: true },
-  'weibo': { name: '微博', domain: 'weibo.com', enabled: true },
-  'douyin': { name: '抖音/TikTok', domain: 'douyin.com', enabled: true },
-  'youtube': { name: 'YouTube (仅 Shorts)', domain: 'youtube.com', enabled: true }
+  'xiaohongshu.com': { name: '小红书', domain: 'xiaohongshu.com', enabled: true },
+  'bilibili.com': { name: '哔哩哔哩', domain: 'bilibili.com', enabled: true },
+  'zhihu.com': { name: '知乎', domain: 'zhihu.com', enabled: true },
+  'weibo.com': { name: '微博', domain: 'weibo.com', enabled: true },
+  'douyin.com': { name: '抖音/TikTok', domain: 'douyin.com', enabled: true },
+  'youtube.com': { name: 'YouTube (仅 Shorts)', domain: 'youtube.com', enabled: true }
 };
 
 // 初始化
@@ -133,9 +133,28 @@ function bindEvents() {
   // 添加自定义网站
   document.getElementById('addBtn').addEventListener('click', async () => {
     const input = document.getElementById('customInput');
-    const domain = input.value.trim().toLowerCase();
+    const rawInput = input.value.trim().toLowerCase();
 
-    if (!domain) return;
+    if (!rawInput) return;
+
+    // 提取纯净域名（去掉协议、路径、查询参数）
+    let domain = rawInput;
+    try {
+      // 尝试作为 URL 解析
+      if (domain.includes('://')) {
+        const url = new URL(domain);
+        domain = url.hostname;
+      } else if (domain.includes('/')) {
+        // 没有协议但有路径，添加协议再解析
+        const url = new URL('https://' + domain);
+        domain = url.hostname;
+      }
+      // 去掉 www. 前缀
+      domain = domain.replace(/^www\./, '');
+    } catch (e) {
+      // 解析失败，使用原始输入
+    }
+
     if (!domain.includes('.') || domain.includes(' ')) {
       alert('请输入有效的域名，如: v2ex.com');
       return;

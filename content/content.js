@@ -10,13 +10,14 @@
 
   // ===== 配置 =====
   const CONFIG = {
-    DEBOUNCE_MS: 600,           // 防抖时间
+    DEBOUNCE_MS: 400,           // 防抖时间
     DECAY_INTERVAL_S: 60,       // 衰减间隔（秒）
     LEVEL1_THRESHOLD: 3,        // 呼吸警戒线
     LEVEL2_THRESHOLD: 6,        // 灵魂拷问
     LEVEL3_THRESHOLD: 9,        // 强制隔离
     LEVEL1_COOLDOWN_S: 5,       // Level 1 冷却
     LEVEL2_COOLDOWN_S: 10,      // Level 2 冷却
+    INITIAL_GRACE_PERIOD_MS: 3000, // 初始冷却期（3秒）
   };
 
   // 默认站点路由规则
@@ -60,11 +61,16 @@
     isSuspended: false,
     suspendEndTime: 0,
     currentLevel: 0,
-    levelCooldownEnd: 0
+    levelCooldownEnd: 0,
+    initTime: Date.now(),  // 页面初始化时间
+    listenersAdded: false  // 事件监听器是否已添加
   };
 
   // ===== 初始化 =====
   async function init() {
+    // 始终注册消息监听，以便响应配置变更
+    setupMessageListener();
+
     // 检查是否应该监控当前页面
     const shouldMonitor = await checkShouldMonitor();
     if (!shouldMonitor) {
@@ -73,37 +79,55 @@
     }
 
     console.log('[Scroll Reminder] Monitoring started for', location.hostname);
+    startMonitoring();
+  }
+
+  // 开始监控
+  function startMonitoring() {
     setupEventListeners();
     startDecayTimer();
-    setupMessageListener();
   }
 
   // ===== 消息监听 =====
   function setupMessageListener() {
     chrome.runtime.onMessage.addListener((message) => {
       if (message.type === 'enabledChanged') {
-        // 插件启用状态变更
-        if (!message.enabled) {
-          // 禁用：清理所有干预和状态
-          cleanupInterventions();
-          state.enabled = false;
-        } else {
-          // 启用：重新初始化
-          state.enabled = true;
-          if (!state.debounceTimer) {
-            setupEventListeners();
-            startDecayTimer();
-          }
-        }
+        handleEnabledChange(message.enabled);
       } else if (message.type === 'sitesChanged' || message.type === 'customSitesChanged') {
-        // 站点配置变更：重新检查是否应该监控
-        checkShouldMonitor().then(shouldMonitor => {
-          if (!shouldMonitor) {
-            cleanupInterventions();
-          }
-        });
+        handleSitesChange();
       }
     });
+  }
+
+  // 处理插件启用状态变更
+  async function handleEnabledChange(enabled) {
+    if (!enabled) {
+      // 禁用：清理所有干预和状态
+      cleanupInterventions();
+      state.enabled = false;
+    } else {
+      // 启用：重新检查是否应该监控
+      state.enabled = true;
+      const shouldMonitor = await checkShouldMonitor();
+      if (shouldMonitor && !state.debounceTimer) {
+        startMonitoring();
+      }
+    }
+  }
+
+  // 处理站点配置变更
+  async function handleSitesChange() {
+    const shouldMonitor = await checkShouldMonitor();
+    const isCurrentlyMonitoring = state.debounceTimer !== null;
+
+    if (!shouldMonitor && isCurrentlyMonitoring) {
+      // 不应该监控但正在监控：停止监控
+      cleanupInterventions();
+    } else if (shouldMonitor && !isCurrentlyMonitoring) {
+      // 应该监控但没在监控：启动监控
+      startMonitoring();
+    }
+    // 其他情况：状态已经正确，无需操作
   }
 
   // 清理所有干预元素和状态
@@ -135,6 +159,9 @@
     state.count = 0;
     state.currentLevel = 0;
     state.isSuspended = false;
+
+    // 移除事件监听器
+    removeEventListeners();
   }
 
   // ===== 路由判定 =====
@@ -149,7 +176,10 @@
     // 检查自定义网站（全局监控）
     const customSites = result.customSites || [];
     for (const domain of customSites) {
-      if (hostname.includes(domain) || domain.includes(hostname.replace(/^www\./, ''))) {
+      // domain 是纯净域名如 'github.com'
+      // hostname 可能是 'github.com' 或 'www.github.com' 或 'gist.github.com'
+      const cleanHostname = hostname.replace(/^www\./, '');
+      if (cleanHostname === domain || cleanHostname.endsWith('.' + domain)) {
         return true;
       }
     }
@@ -159,7 +189,7 @@
     for (const [siteKey, rule] of Object.entries(SITE_RULES)) {
       if (!hostname.includes(siteKey)) continue;
 
-      // 检查该站点是否被用户启用
+      // 检查该站点是否被用户启用（siteKey 是域名如 'bilibili.com'）
       const isEnabled = enabledSites[siteKey] !== false;
       if (!isEnabled) return false;
 
@@ -196,13 +226,28 @@
 
   // ===== 事件监听 =====
   function setupEventListeners() {
-    // 滚轮事件
+    // 滚轮事件 - 使用相同的函数引用以便移除
     window.addEventListener('wheel', handleScrollStart, { passive: true });
     window.addEventListener('wheel', handleScrollEnd, { passive: true });
 
     // 触摸事件
     window.addEventListener('touchmove', handleScrollStart, { passive: true });
     window.addEventListener('touchend', handleScrollEnd, { passive: true });
+
+    // 标记事件监听器已添加
+    state.listenersAdded = true;
+  }
+
+  // 移除事件监听器
+  function removeEventListeners() {
+    if (!state.listenersAdded) return;
+
+    window.removeEventListener('wheel', handleScrollStart, { passive: true });
+    window.removeEventListener('wheel', handleScrollEnd, { passive: true });
+    window.removeEventListener('touchmove', handleScrollStart, { passive: true });
+    window.removeEventListener('touchend', handleScrollEnd, { passive: true });
+
+    state.listenersAdded = false;
   }
 
   // Scroll 开始（触发防抖）
@@ -227,6 +272,11 @@
 
   // 是否应该计数
   function shouldCount() {
+    // 检查初始冷却期（进入页面后3秒内不统计）
+    if (Date.now() - state.initTime < CONFIG.INITIAL_GRACE_PERIOD_MS) {
+      return false;
+    }
+
     // 检查暂停状态
     if (state.isSuspended && Date.now() < state.suspendEndTime) {
       return false;
@@ -338,7 +388,7 @@
       bottom: 0 !important;
       width: 100vw !important;
       height: 100vh !important;
-      background: rgba(0, 0, 0, 0.35) !important;
+      background: rgba(0, 0, 0, 0.3) !important;
       backdrop-filter: blur(12px) !important;
       -webkit-backdrop-filter: blur(12px) !important;
       z-index: 2147483646 !important;
