@@ -336,7 +336,11 @@
   function showLevel1Intervention() {
     console.log('[Scroll Reminder] Level 1: 呼吸警戒线');
 
-    // 创建光晕元素 - 增大范围和强度
+    // 移除已有的光晕
+    const existingGlow = document.getElementById('sr-glow');
+    if (existingGlow) existingGlow.remove();
+
+    // 创建光晕元素 - v1.0 范围颜色 + 呼吸效果
     const glow = document.createElement('div');
     glow.id = 'sr-glow';
     glow.style.cssText = `
@@ -347,27 +351,27 @@
       bottom: 0;
       pointer-events: none;
       z-index: 2147483647;
-      box-shadow: inset 0 0 120px 40px rgba(255, 80, 0, 0.7);
+      box-shadow: inset 0 0 60px 20px rgba(255, 102, 0, 0.6);
       animation: sr-breathe 2s ease-in-out infinite;
     `;
 
-    // 添加动画样式
+    // 添加动画样式 - 呼吸效果
     const style = document.createElement('style');
     style.textContent = `
       @keyframes sr-breathe {
-        0%, 100% { opacity: 0.5; box-shadow: inset 0 0 100px 30px rgba(255, 80, 0, 0.6); }
-        50% { opacity: 1; box-shadow: inset 0 0 150px 60px rgba(255, 60, 0, 0.85); }
+        0%, 100% { box-shadow: inset 0 0 60px 20px rgba(255, 102, 0, 0.4); }
+        50% { box-shadow: inset 0 0 80px 30px rgba(255, 102, 0, 0.75); }
       }
     `;
     document.head.appendChild(style);
     document.body.appendChild(glow);
 
-    // 4秒后渐隐消失
+    // 3秒后渐隐消失
     setTimeout(() => {
       glow.style.transition = 'opacity 1s';
       glow.style.opacity = '0';
       setTimeout(() => glow.remove(), 1000);
-    }, 4000);
+    }, 3000);
 
     // 设置冷却期
     state.levelCooldownEnd = Date.now() + CONFIG.LEVEL1_COOLDOWN_S * 1000;
